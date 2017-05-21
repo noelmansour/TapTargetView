@@ -114,6 +114,7 @@ public class TapTargetView extends View {
   boolean shouldDrawShadow;
   boolean cancelable;
   boolean visible;
+  boolean transparentTarget;
 
   // Debug related variables
   @Nullable
@@ -547,62 +548,82 @@ public class TapTargetView extends View {
     getViewTreeObserver().addOnGlobalLayoutListener(globalLayoutListener);
 
     setFocusableInTouchMode(true);
-    setClickable(true);
-    setOnClickListener(new OnClickListener() {
-      @Override
-      public void onClick(View v) {
-        if (listener == null || outerCircleCenter == null || !isInteractable) return;
+    if (!transparentTarget) {
+      setClickable(true);
+      setOnClickListener(new OnClickListener() {
+        @Override
+        public void onClick(View v) {
+          if (listener == null || outerCircleCenter == null || !isInteractable)
+            return;
 
-        final boolean clickedInTarget;
-        switch (shape) {
-          case RECTANGLE:
-            Rect clickArea = new Rect(targetBounds.centerX() - TARGET_WIDTH, targetBounds.centerY() - TARGET_HEIGHT, targetBounds.centerX() + TARGET_WIDTH, targetBounds.centerY() + TARGET_HEIGHT);
-            clickedInTarget = clickArea.contains((int) lastTouchX, (int) lastTouchY);
-            break;
-          case CIRCLE:
-          default:
-            clickedInTarget = distance(targetBounds.centerX(), targetBounds.centerY(), (int) lastTouchX, (int) lastTouchY) <= targetCircleRadius;
+          final boolean clickedInTarget = clickedInTarget();
+          final boolean clickedInsideOfOuterCircle = clickedInsideOfOuterCircle(lastTouchX, lastTouchY);
+
+          if (clickedInTarget) {
+            isInteractable = false;
+            listener.onTargetClick(TapTargetView.this);
+          } else if (clickedInsideOfOuterCircle) {
+            listener.onOuterCircleClick(TapTargetView.this);
+          } else if (cancelable) {
+            isInteractable = false;
+            listener.onTargetCancel(TapTargetView.this);
+          }
         }
+      });
 
-        final double distanceToOuterCircleCenter = distance(outerCircleCenter[0], outerCircleCenter[1],
-            (int) lastTouchX, (int) lastTouchY);
-        final boolean clickedInsideOfOuterCircle = distanceToOuterCircleCenter <= outerCircleRadius;
+      setOnLongClickListener(new OnLongClickListener() {
+        @Override
+        public boolean onLongClick(View v) {
+          if (listener == null)
+            return false;
 
-        if (clickedInTarget) {
-          isInteractable = false;
-          listener.onTargetClick(TapTargetView.this);
-        } else if (clickedInsideOfOuterCircle) {
-          listener.onOuterCircleClick(TapTargetView.this);
-        } else if (cancelable) {
-          isInteractable = false;
-          listener.onTargetCancel(TapTargetView.this);
+          if (targetBounds.contains((int) lastTouchX, (int) lastTouchY)) {
+            listener.onTargetLongClick(TapTargetView.this);
+            return true;
+          }
+
+          return false;
         }
-      }
-    });
+      });
+    }
+  }
 
-    setOnLongClickListener(new OnLongClickListener() {
-      @Override
-      public boolean onLongClick(View v) {
-        if (listener == null) return false;
+  private boolean clickedInsideOfOuterCircle(float lastTouchX, float lastTouchY) {
+    final double distanceToOuterCircleCenter = distance(
+        outerCircleCenter[0],
+        outerCircleCenter[1],
+        (int) lastTouchX,
+        (int) lastTouchY);
+    return distanceToOuterCircleCenter <= outerCircleRadius;
+  }
 
-        if (targetBounds.contains((int) lastTouchX, (int) lastTouchY)) {
-          listener.onTargetLongClick(TapTargetView.this);
-          return true;
-        }
-
-        return false;
-      }
-    });
+  private boolean clickedInTarget() {
+    final boolean clickedInTarget;
+    switch (shape) {
+      case RECTANGLE:
+        Rect clickArea = new Rect(targetBounds.centerX() - TARGET_WIDTH,
+            targetBounds.centerY() - TARGET_HEIGHT, targetBounds.centerX() + TARGET_WIDTH,
+            targetBounds.centerY() + TARGET_HEIGHT);
+        clickedInTarget = clickArea.contains((int) lastTouchX, (int) lastTouchY);
+        break;
+      case CIRCLE:
+      default:
+        clickedInTarget =
+            distance(targetBounds.centerX(), targetBounds.centerY(), (int) lastTouchX,
+                (int) lastTouchY) <= targetCircleRadius;
+    }
+    return clickedInTarget;
   }
 
   protected void applyTargetOptions(Context context) {
     shouldTintTarget = target.tintTarget;
     shouldDrawShadow = target.drawShadow;
     cancelable = target.cancelable;
+    transparentTarget = target.transparentTarget;
 
     // We can't clip out portions of a view outline, so if the user specified a transparent
     // target, we need to fallback to drawing a jittered shadow approximation
-    if (shouldDrawShadow && Build.VERSION.SDK_INT >= 21 && !target.transparentTarget) {
+    if (shouldDrawShadow && Build.VERSION.SDK_INT >= 21 && !transparentTarget) {
       outlineProvider = new ViewOutlineProvider() {
         @TargetApi(Build.VERSION_CODES.LOLLIPOP)
         @Override
@@ -647,7 +668,7 @@ public class TapTargetView extends View {
       targetCirclePaint.setColor(isDark ? Color.BLACK : Color.WHITE);
     }
 
-    if (target.transparentTarget) {
+    if (transparentTarget) {
       targetCirclePaint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.CLEAR));
     }
 
@@ -811,6 +832,11 @@ public class TapTargetView extends View {
   public boolean onTouchEvent(MotionEvent e) {
     lastTouchX = e.getX();
     lastTouchY = e.getY();
+    if (transparentTarget && outerCircleCenter != null) {
+      final boolean clickedInTarget = clickedInTarget();
+      final boolean clickedInsideOfOuterCircle = clickedInsideOfOuterCircle(lastTouchX, lastTouchY);
+      return !clickedInTarget && clickedInsideOfOuterCircle;
+    }
     return super.onTouchEvent(e);
   }
 
