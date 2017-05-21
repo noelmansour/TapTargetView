@@ -868,6 +868,11 @@ public class TapTargetView extends View {
     return false;
   }
 
+  public void dismissSkipAnimation() {
+    ViewUtil.removeView(parent, this);
+    onDismiss(true);
+  }
+
   /**
    * Dismiss this view
    * @param tappedTarget If the user tapped the target or not
