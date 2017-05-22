@@ -869,8 +869,10 @@ public class TapTargetView extends View {
   }
 
   public void dismissSkipAnimation() {
+    pulseAnimation.cancel();
+    expandAnimation.cancel();
     ViewUtil.removeView(parent, this);
-    onDismiss(true);
+    onDismiss();
   }
 
   /**
@@ -879,6 +881,11 @@ public class TapTargetView extends View {
    *                     (results in different dismiss animations)
    */
   public void dismiss(boolean tappedTarget) {
+    if (!isVisible()) {
+      dismissSkipAnimation();
+      return;
+    }
+
     pulseAnimation.cancel();
     expandAnimation.cancel();
     if (tappedTarget) {
